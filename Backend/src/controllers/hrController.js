@@ -1,6 +1,35 @@
 import pool from '../config/config.js';
 import { v4 as uuidv4 } from 'uuid';
 
+const ALLOWED_NOTIFICATION_TYPES = ['Placement', 'Result', 'Event'];
+
+const validateNotificationPayload = (notificationType, message) => {
+  if (!notificationType || !ALLOWED_NOTIFICATION_TYPES.includes(notificationType)) {
+    return 'notification_type must be Placement, Result or Event.';
+  }
+
+  if (!message || message.trim() === '') {
+    return 'Message is required.';
+  }
+
+  return null;
+};
+
+const buildNotificationArtifacts = (notificationId, studentIds) => {
+  const studentNotificationValues = studentIds.map((studentId) => [notificationId, studentId]);
+  const queueValues = [];
+  const deliveryLogValues = [];
+
+  for (const studentId of studentIds) {
+    queueValues.push([notificationId, studentId, 'email']);
+    queueValues.push([notificationId, studentId, 'in_app']);
+    deliveryLogValues.push([notificationId, studentId, 'email', 'pending']);
+    deliveryLogValues.push([notificationId, studentId, 'in_app', 'pending']);
+  }
+
+  return { studentNotificationValues, queueValues, deliveryLogValues };
+};
+
 /*
 |--------------------------------------------------------------------------
 | POST /api/hr/notify-all
@@ -12,33 +41,28 @@ export const notifyAll = async (req, res, next) => {
     const { notification_type, message } = req.body;
     const hrId = req.user.id;
 
-    const allowedTypes = ['Placement', 'Result', 'Event'];
-    if (!notification_type || !allowedTypes.includes(notification_type)) {
+    const validationError = validateNotificationPayload(notification_type, message);
+    if (validationError) {
       return res.status(400).json({
         success: false,
-        message: 'notification_type must be Placement, Result or Event.',
-      });
-    }
-    if (!message || message.trim() === '') {
-      return res.status(400).json({
-        success: false,
-        message: 'Message is required.',
+        message: validationError,
       });
     }
 
-    const [students] = await pool.query(
+    await connection.beginTransaction();
+
+    const [students] = await connection.query(
       "SELECT id FROM users WHERE role = 'student' AND is_active = 1"
     );
 
     if (students.length === 0) {
+      await connection.rollback();
       return res.status(200).json({
         success: true,
         message: 'No active students found.',
         data: { notificationId: null, recipientCount: 0 },
       });
     }
-
-    await connection.beginTransaction();
 
     const notificationId = uuidv4();
     await connection.query(
@@ -47,20 +71,28 @@ export const notifyAll = async (req, res, next) => {
       [notificationId, hrId, notification_type, message.trim(), students.length]
     );
 
-    const snValues = students.map((s) => [notificationId, s.id]);
+    const studentIds = students.map((student) => student.id);
+    const {
+      studentNotificationValues,
+      queueValues,
+      deliveryLogValues,
+    } = buildNotificationArtifacts(notificationId, studentIds);
+
     await connection.query(
       'INSERT INTO student_notifications (notification_id, student_id) VALUES ?',
-      [snValues]
+      [studentNotificationValues]
     );
 
-    const queueValues = [];
-    for (const s of students) {
-      queueValues.push([notificationId, s.id, 'email']);
-      queueValues.push([notificationId, s.id, 'in_app']);
-    }
     await connection.query(
       'INSERT INTO notification_queue (notification_id, student_id, channel) VALUES ?',
       [queueValues]
+    );
+
+    await connection.query(
+      `INSERT INTO notification_delivery_log
+       (notification_id, student_id, channel, status)
+       VALUES ?`,
+      [deliveryLogValues]
     );
 
     await connection.commit();
@@ -92,17 +124,11 @@ export const notifySelected = async (req, res, next) => {
     const { notification_type, message, student_ids } = req.body;
     const hrId = req.user.id;
 
-    const allowedTypes = ['Placement', 'Result', 'Event'];
-    if (!notification_type || !allowedTypes.includes(notification_type)) {
+    const validationError = validateNotificationPayload(notification_type, message);
+    if (validationError) {
       return res.status(400).json({
         success: false,
-        message: 'notification_type must be Placement, Result or Event.',
-      });
-    }
-    if (!message || message.trim() === '') {
-      return res.status(400).json({
-        success: false,
-        message: 'Message is required.',
+        message: validationError,
       });
     }
     if (!Array.isArray(student_ids) || student_ids.length === 0) {
@@ -112,37 +138,71 @@ export const notifySelected = async (req, res, next) => {
       });
     }
 
+    const normalizedStudentIds = [...new Set(student_ids.filter(Boolean))];
+    if (normalizedStudentIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'student_ids must contain valid student ids.',
+      });
+    }
+
     await connection.beginTransaction();
+
+    const placeholders = normalizedStudentIds.map(() => '?').join(', ');
+    const [students] = await connection.query(
+      `SELECT id
+       FROM users
+       WHERE role = 'student'
+         AND is_active = 1
+         AND id IN (${placeholders})`,
+      normalizedStudentIds
+    );
+
+    if (students.length !== normalizedStudentIds.length) {
+      await connection.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'One or more student_ids are invalid or inactive.',
+      });
+    }
 
     const notificationId = uuidv4();
     await connection.query(
       `INSERT INTO notifications (id, created_by, notification_type, message, total_recipients)
        VALUES (?, ?, ?, ?, ?)`,
-      [notificationId, hrId, notification_type, message.trim(), student_ids.length]
+      [notificationId, hrId, notification_type, message.trim(), students.length]
     );
 
-    const snValues = student_ids.map((id) => [notificationId, id]);
+    const studentIds = students.map((student) => student.id);
+    const {
+      studentNotificationValues,
+      queueValues,
+      deliveryLogValues,
+    } = buildNotificationArtifacts(notificationId, studentIds);
+
     await connection.query(
       'INSERT INTO student_notifications (notification_id, student_id) VALUES ?',
-      [snValues]
+      [studentNotificationValues]
     );
 
-    const queueValues = [];
-    for (const id of student_ids) {
-      queueValues.push([notificationId, id, 'email']);
-      queueValues.push([notificationId, id, 'in_app']);
-    }
     await connection.query(
       'INSERT INTO notification_queue (notification_id, student_id, channel) VALUES ?',
       [queueValues]
+    );
+
+    await connection.query(
+      `INSERT INTO notification_delivery_log
+       (notification_id, student_id, channel, status)
+       VALUES ?`,
+      [deliveryLogValues]
     );
 
     await connection.commit();
 
     return res.status(201).json({
       success: true,
-      message: `Notification queued for ${student_ids.length} student(s).`,
-      data: { notificationId, recipientCount: student_ids.length },
+      message: `Notification queued for ${students.length} student(s).`,
+      data: { notificationId, recipientCount: students.length },
     });
   } catch (error) {
     await connection.rollback();
@@ -165,12 +225,10 @@ export const getHistory = async (req, res, next) => {
     const offset = (page - 1) * limit;
     const type   = req.query.notification_type;
 
-    const allowedTypes = ['Placement', 'Result', 'Event'];
-
     let whereClause = 'WHERE n.created_by = ?';
     const params    = [req.user.id];
 
-    if (type && allowedTypes.includes(type)) {
+    if (type && ALLOWED_NOTIFICATION_TYPES.includes(type)) {
       whereClause += ' AND n.notification_type = ?';
       params.push(type);
     }
@@ -187,6 +245,7 @@ export const getHistory = async (req, res, next) => {
          n.message,
          n.total_recipients,
          n.created_at,
+         SUM(CASE WHEN dl.status = 'pending' THEN 1 ELSE 0 END) AS pending_count,
          SUM(CASE WHEN dl.status = 'sent'   THEN 1 ELSE 0 END) AS sent_count,
          SUM(CASE WHEN dl.status = 'failed' THEN 1 ELSE 0 END) AS failed_count
        FROM notifications n

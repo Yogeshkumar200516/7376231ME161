@@ -251,3 +251,26 @@ Student pages (3)
 /notifications — full paginated feed with type filter and new/read distinction
 /notifications/priority — top-n priority inbox ranked by weight + recency, with n selector and type filter
 /notifications/:id — single notification detail view; opening it marks it as read
+
+
+
+
+Now you can see the login page template (which is taken from another project) in the Frontend/src/components/Login/Login_temp.jsx file
+so take that file as reference and give me the login page for me using that same ui and styles but for this project in the Login.jsx
+ file in the same directory for this project
+
+Also you can see the Navbar page template (which is taken from another project) in the Frontend/src/components/Navbar/Navbar_temp.jsx file
+so take this file as reference and give me the Navbar page for me using that same ui and styles but for this project in the Navbar.jsx
+ file in the same directory for this project
+
+Ands also i need all the routes to be present in the AppLayout.jsx file and call this AppLayout in the App.jsx file, also update the
+Frontend/src/context/AuthContext.js file and Frontend/src/ToggleTheme folder's toggle coontext and toggletheme files correctly based on this project
+as they were taken from the other project so update all these files correctly and implement the protected routes also correctly, and create files for each 
+page in the corresponding role name in the Frontend/src/pages folder and use that as the frontend pages as per the requirements and the backend, also
+now i dont need to use the bcrypt and i can store the raw password directly so update that also so this completely project will be ready properly
+
+
+So, if i logged in if the role is hr then it have to go to the hr pages and if student then have to go to the student pages and also tose hr and student pages should be 
+completely properly so all those pages will working
+
+Also all these pages should support both dark and light theme and also i need these page to have highly responsive to all the devices so give the complete codes accordingly...

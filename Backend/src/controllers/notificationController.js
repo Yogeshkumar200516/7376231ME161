@@ -136,6 +136,14 @@ export const getNotificationById = async (req, res, next) => {
     const studentId      = req.user.id;
     const notificationId = req.params.id;
 
+    await pool.query(
+      `UPDATE student_notifications
+       SET is_read = 1,
+           read_at = COALESCE(read_at, NOW())
+       WHERE notification_id = ? AND student_id = ?`,
+      [notificationId, studentId]
+    );
+
     const [rows] = await pool.query(
       `SELECT
          n.id,
@@ -186,9 +194,24 @@ export const markAsRead = async (req, res, next) => {
     );
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Notification not found or already read.',
+      const [rows] = await pool.query(
+        `SELECT is_read
+         FROM student_notifications
+         WHERE notification_id = ? AND student_id = ?
+         LIMIT 1`,
+        [notificationId, studentId]
+      );
+
+      if (rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Notification not found.',
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: 'Notification was already marked as read.',
       });
     }
 

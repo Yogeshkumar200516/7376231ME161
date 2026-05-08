@@ -1,6 +1,9 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { v4 as uuidv4 } from 'uuid';
 import pool from '../config/config.js';
+
+const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 
 const generateToken = (user) => {
   return jwt.sign(
@@ -8,6 +11,10 @@ const generateToken = (user) => {
     process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
   );
+};
+
+const getSessionExpiry = () => {
+  return new Date(Date.now() + SESSION_DURATION_MS);
 };
 
 /*
@@ -18,8 +25,10 @@ const generateToken = (user) => {
 export const register = async (req, res, next) => {
   try {
     const { name, email, password, role } = req.body;
+    const normalizedName = name?.trim();
+    const normalizedEmail = email?.trim().toLowerCase();
 
-    if (!name || !email || !password) {
+    if (!normalizedName || !normalizedEmail || !password) {
       return res.status(400).json({
         success: false,
         message: 'Name, email and password are required.',
@@ -31,7 +40,7 @@ export const register = async (req, res, next) => {
 
     const [existing] = await pool.query(
       'SELECT id FROM users WHERE email = ?',
-      [email]
+      [normalizedEmail]
     );
 
     if (existing.length > 0) {
@@ -42,18 +51,24 @@ export const register = async (req, res, next) => {
     }
 
     const password_hash = await bcrypt.hash(password, 10);
-    const [result] = await pool.query(
-      `INSERT INTO users (name, email, password_hash, role)
-       VALUES (?, ?, ?, ?)`,
-      [name, email, password_hash, userRole]
+    const userId = uuidv4();
+    await pool.query(
+      `INSERT INTO users (id, name, email, password_hash, role)
+       VALUES (?, ?, ?, ?, ?)`,
+      [userId, normalizedName, normalizedEmail, password_hash, userRole]
     );
 
     const [rows] = await pool.query(
       'SELECT id, name, email, role, created_at FROM users WHERE id = ?',
-      [result.insertId]
+      [userId]
     );
 
     const token = generateToken(rows[0]);
+    await pool.query(
+      `INSERT INTO sessions (user_id, token, expires_at)
+       VALUES (?, ?, ?)`,
+      [userId, token, getSessionExpiry()]
+    );
 
     return res.status(201).json({
       success: true,
@@ -73,8 +88,9 @@ export const register = async (req, res, next) => {
 export const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
+    const normalizedEmail = email?.trim().toLowerCase();
 
-    if (!email || !password) {
+    if (!normalizedEmail || !password) {
       return res.status(400).json({
         success: false,
         message: 'Email and password are required.',
@@ -83,7 +99,7 @@ export const login = async (req, res, next) => {
 
     const [rows] = await pool.query(
       'SELECT * FROM users WHERE email = ? AND is_active = 1',
-      [email]
+      [normalizedEmail]
     );
 
     if (rows.length === 0) {
@@ -107,8 +123,8 @@ export const login = async (req, res, next) => {
 
     await pool.query(
       `INSERT INTO sessions (user_id, token, expires_at)
-       VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))`,
-      [user.id, token]
+       VALUES (?, ?, ?)`,
+      [user.id, token, getSessionExpiry()]
     );
 
     return res.status(200).json({
