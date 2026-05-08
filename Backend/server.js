@@ -5,117 +5,54 @@ import morgan from 'morgan';
 
 import { connectDB } from './src/config/config.js';
 
-// import authRoutes         from './routes/auth.routes.js';
-// import notificationRoutes from './routes/notification.routes.js';
-// import studentRoutes      from './routes/student.routes.js';
-// import hrRoutes           from './routes/hr.routes.js';
+import authRoutes from './src/routes/authRoutes.js';
+import notificationRoutes from './src/routes/notificationRoutes.js';
+import studentRoutes from './src/routes/studentRoutes.js';
+import hrRoutes from './src/routes/hrRoutes.js';
 
 dotenv.config();
 
-const app = express();
-
+const app  = express();
 const PORT = process.env.PORT || 5000;
 
-/*
-|--------------------------------------------------------------------------
-| Middleware
-|--------------------------------------------------------------------------
-*/
-
-app.use(
-  cors({
-    origin: process.env.CLIENT_URL || 'http://localhost:3000',
-    credentials: true,
-  })
-);
-
-app.use(
-  morgan(
-    process.env.NODE_ENV === 'development'
-      ? 'dev'
-      : 'combined'
-  )
-);
-
+app.use(cors({
+  origin:      process.env.CLIENT_URL || 'http://localhost:3000',
+  credentials: true,
+}));
+app.use(morgan(process.env.NODE_ENV === 'development' ? 'dev' : 'combined'));
 app.use(express.json());
-
-app.use(
-  express.urlencoded({
-    extended: true,
-  })
-);
-
-/*
-|--------------------------------------------------------------------------
-| Health Check Route
-|--------------------------------------------------------------------------
-*/
+app.use(express.urlencoded({ extended: true }));
 
 app.get('/health', (_req, res) => {
   res.status(200).json({
-    success: true,
-    status: 'ok',
+    success:     true,
+    status:      'ok',
     environment: process.env.NODE_ENV,
-    timestamp: new Date().toISOString(),
+    timestamp:   new Date().toISOString(),
   });
 });
 
-/*
-|--------------------------------------------------------------------------
-| API Routes
-|--------------------------------------------------------------------------
-*/
-
-// app.use('/api/auth', authRoutes);
-
-// app.use('/api/notifications', notificationRoutes);
-
-// app.use('/api/student', studentRoutes);
-
-// app.use('/api/hr', hrRoutes);
-
-/*
-|--------------------------------------------------------------------------
-| 404 Route Handler
-|--------------------------------------------------------------------------
-*/
+app.use('/api/auth', authRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/student', studentRoutes);
+app.use('/api/hr', hrRoutes);
 
 app.use((_req, res) => {
-  res.status(404).json({
-    success: false,
-    message: 'Route not found',
-  });
+  res.status(404).json({ success: false, message: 'Route not found' });
 });
-
-/*
-|--------------------------------------------------------------------------
-| Global Error Handler
-|--------------------------------------------------------------------------
-*/
 
 app.use((err, _req, res, _next) => {
   console.error('Global Error:', err);
-
   res.status(err.status || 500).json({
     success: false,
     message: err.message || 'Internal server error',
-    stack:
-      process.env.NODE_ENV === 'development'
-        ? err.stack
-        : undefined,
+    stack:   process.env.NODE_ENV === 'development' ? err.stack : undefined,
   });
 });
-
-/*
-|--------------------------------------------------------------------------
-| Start Server
-|--------------------------------------------------------------------------
-*/
 
 const startServer = async () => {
   try {
     await connectDB();
-
     app.listen(PORT, () => {
       console.log(`
 ==================================================
