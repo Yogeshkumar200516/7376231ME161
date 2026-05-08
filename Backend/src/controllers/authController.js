@@ -1,4 +1,3 @@
-import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import pool from '../config/config.js';
@@ -50,12 +49,11 @@ export const register = async (req, res, next) => {
       });
     }
 
-    const password_hash = await bcrypt.hash(password, 10);
     const userId = uuidv4();
     await pool.query(
       `INSERT INTO users (id, name, email, password_hash, role)
        VALUES (?, ?, ?, ?, ?)`,
-      [userId, normalizedName, normalizedEmail, password_hash, userRole]
+      [userId, normalizedName, normalizedEmail, password, userRole]
     );
 
     const [rows] = await pool.query(
@@ -110,9 +108,7 @@ export const login = async (req, res, next) => {
     }
 
     const user = rows[0];
-    const isMatch = await bcrypt.compare(password, user.password_hash);
-
-    if (!isMatch) {
+    if (password !== user.password_hash) {
       return res.status(401).json({
         success: false,
         message: 'Invalid email or password.',

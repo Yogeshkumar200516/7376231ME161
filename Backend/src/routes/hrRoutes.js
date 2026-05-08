@@ -4,6 +4,8 @@ import {
   notifySelected,
   getHistory,
   getAllStudents,
+  getAllUsers,
+  createUser,
 } from '../controllers/hrController.js';
 import { protect, authorizeRoles } from '../middleware/authMiddleware.js';
 
@@ -16,5 +18,7 @@ router.post('/notify-all',      notifyAll);
 router.post('/notify-selected', notifySelected);
 router.get('/history',          getHistory);
 router.get('/students',         getAllStudents);
+router.get('/users',            getAllUsers);
+router.post('/users',           createUser);
 
 export default router;

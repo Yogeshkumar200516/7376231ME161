@@ -2,6 +2,7 @@ import pool from '../config/config.js';
 import { v4 as uuidv4 } from 'uuid';
 
 const ALLOWED_NOTIFICATION_TYPES = ['Placement', 'Result', 'Event'];
+const ALLOWED_USER_ROLES = ['hr', 'student'];
 
 const validateNotificationPayload = (notificationType, message) => {
   if (!notificationType || !ALLOWED_NOTIFICATION_TYPES.includes(notificationType)) {
@@ -288,6 +289,101 @@ export const getAllStudents = async (req, res, next) => {
     return res.status(200).json({
       success: true,
       data: { students: rows },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/*
+|--------------------------------------------------------------------------
+| GET /api/hr/users
+|--------------------------------------------------------------------------
+*/
+export const getAllUsers = async (req, res, next) => {
+  try {
+    const role = req.query.role;
+    const params = [];
+    let whereClause = '';
+
+    if (role && ALLOWED_USER_ROLES.includes(role)) {
+      whereClause = 'WHERE role = ?';
+      params.push(role);
+    }
+
+    const [rows] = await pool.query(
+      `SELECT id, name, email, role, is_active, created_at
+       FROM users
+       ${whereClause}
+       ORDER BY created_at DESC`,
+      params
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: { users: rows },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/*
+|--------------------------------------------------------------------------
+| POST /api/hr/users
+|--------------------------------------------------------------------------
+*/
+export const createUser = async (req, res, next) => {
+  try {
+    const { name, email, password, role } = req.body;
+    const normalizedName = name?.trim();
+    const normalizedEmail = email?.trim().toLowerCase();
+    const normalizedRole = role?.trim().toLowerCase();
+
+    if (!normalizedName || !normalizedEmail || !password?.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Name, email and password are required.',
+      });
+    }
+
+    if (!ALLOWED_USER_ROLES.includes(normalizedRole)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Role must be hr or student.',
+      });
+    }
+
+    const [existingUsers] = await pool.query(
+      'SELECT id FROM users WHERE email = ? LIMIT 1',
+      [normalizedEmail]
+    );
+
+    if (existingUsers.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: 'Email already registered.',
+      });
+    }
+
+    const userId = uuidv4();
+    await pool.query(
+      `INSERT INTO users (id, name, email, password_hash, role)
+       VALUES (?, ?, ?, ?, ?)`,
+      [userId, normalizedName, normalizedEmail, password.trim(), normalizedRole]
+    );
+
+    const [rows] = await pool.query(
+      `SELECT id, name, email, role, is_active, created_at
+       FROM users
+       WHERE id = ?`,
+      [userId]
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: 'User created successfully.',
+      data: { user: rows[0] },
     });
   } catch (error) {
     next(error);

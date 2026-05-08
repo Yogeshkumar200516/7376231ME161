@@ -1,61 +1,98 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 
-const AuthContext = createContext();
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const AuthContext = createContext(null);
+
+export const api = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+const applyToken = (token) => {
+  if (token) {
+    api.defaults.headers.common.Authorization = `Bearer ${token}`;
+    axios.defaults.headers.common.Authorization = `Bearer ${token}`;
+  } else {
+    delete api.defaults.headers.common.Authorization;
+    delete axios.defaults.headers.common.Authorization;
+  }
+};
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null);
+  const [isBootstrapping, setIsBootstrapping] = useState(true);
 
-  // Load user and token from localStorage safely
   useEffect(() => {
     try {
-      const storedUser = localStorage.getItem('user');
-      const storedToken = localStorage.getItem('token');
-      
+      const storedUser = localStorage.getItem('notification_user');
+      const storedToken = localStorage.getItem('notification_token');
+
       if (storedUser && storedToken) {
-        const parsedUser = JSON.parse(storedUser);
-        setUser(parsedUser);
-        
-        // Set the authorization token in axios header for API calls
-        axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+        setUser(JSON.parse(storedUser));
+        setToken(storedToken);
+        applyToken(storedToken);
+      } else {
+        applyToken(null);
       }
-    } catch (error) {
-      console.error("Failed to load user/token from localStorage:", error);
-      localStorage.removeItem('user');
-      localStorage.removeItem('token');
+    } catch (_error) {
+      localStorage.removeItem('notification_user');
+      localStorage.removeItem('notification_token');
+      applyToken(null);
+    } finally {
+      setIsBootstrapping(false);
     }
   }, []);
 
-  // Login function to update user state and localStorage
-  const login = (userData, token) => {
-    try {
-      localStorage.setItem('user', JSON.stringify(userData));
-      localStorage.setItem('token', token);
-      setUser(userData);
+  const login = (userData, authToken) => {
+    localStorage.setItem('notification_user', JSON.stringify(userData));
+    localStorage.setItem('notification_token', authToken);
+    setUser(userData);
+    setToken(authToken);
+    applyToken(authToken);
+  };
 
-      // Set the authorization token for API requests
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    } catch (error) {
-      console.error("Failed to save user/token to localStorage:", error);
+  const logout = async () => {
+    try {
+      if (token) {
+        await api.post('/api/auth/logout');
+      }
+    } catch (_error) {
+      // Ignore logout API failure and clear local state anyway.
+    } finally {
+      localStorage.removeItem('notification_user');
+      localStorage.removeItem('notification_token');
+      setUser(null);
+      setToken(null);
+      applyToken(null);
     }
   };
 
-  // Logout function to clear user state and localStorage
-  const logout = () => {
-    localStorage.removeItem('user');
-    localStorage.removeItem('token');
-    setUser(null);
-
-    // Remove the authorization token from axios header
-    delete axios.defaults.headers.common['Authorization'];
-  };
-
-  return (
-    <AuthContext.Provider value={{ user, login, logout }}>
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo(
+    () => ({
+      api,
+      user,
+      token,
+      isAuthenticated: Boolean(user && token),
+      isBootstrapping,
+      login,
+      logout,
+    }),
+    [user, token, isBootstrapping]
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-// Custom hook to use AuthContext
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+
+  return context;
+};
