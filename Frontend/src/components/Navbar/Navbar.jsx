@@ -77,30 +77,72 @@ function Navbar() {
           : 'linear-gradient(180deg, rgba(11,110,208,0.08), transparent 24%)',
       }}
     >
-      <Box sx={{ px: 2.5, py: 3, justifyContent: 'center' }}>
-        <Box
-          sx={{
-            width: 56,
-            height: 56,
-            borderRadius: 3.5,
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            placeItems: 'center',
-            background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
-            boxShadow: `0 16px 28px ${alpha(theme.palette.primary.main, 0.22)}`,
-            mb: 2,
-          }}
-        >
-          <CampaignRoundedIcon sx={{ color: '#fff', fontSize: 30, justifyContent: 'center' }} />
-        </Box>
-        <Typography variant="h6" sx={{ color: 'text.primary', textAlign: 'center' }}>
-          Campus Notice Hub
-        </Typography>
-        <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5, textAlign: 'center' }}>
-          {user?.role === 'hr' ? 'HR broadcasting workspace' : 'Student notification center'}
-        </Typography>
-      </Box>
+      <Box
+  sx={{
+    px: 2.5,
+    py: 3,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    textAlign: 'center',
+  }}
+>
+  <Box
+    sx={{
+      width: 56,
+      height: 56,
+      borderRadius: 3.5,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      background: `linear-gradient(
+        135deg,
+        ${theme.palette.primary.main},
+        ${theme.palette.secondary.main}
+      )`,
+      boxShadow: `0 16px 28px ${alpha(
+        theme.palette.primary.main,
+        0.22
+      )}`,
+      mb: 2,
+      mx: 'auto',
+    }}
+  >
+    <CampaignRoundedIcon
+      sx={{
+        color: '#fff',
+        fontSize: 30,
+        display: 'block',
+      }}
+    />
+  </Box>
+
+  <Typography
+    variant="h6"
+    sx={{
+      color: 'text.primary',
+      textAlign: 'center',
+      fontWeight: 700,
+    }}
+  >
+    Campus Notice Hub
+  </Typography>
+
+  <Typography
+    variant="body2"
+    sx={{
+      color: 'text.secondary',
+      mt: 0.5,
+      textAlign: 'center',
+      maxWidth: 180,
+    }}
+  >
+    {user?.role === 'hr'
+      ? 'HR broadcasting workspace'
+      : 'Student notification center'}
+  </Typography>
+</Box>
 
       <Divider />
 
@@ -214,6 +256,7 @@ function Navbar() {
               onClick={toggleTheme}
               sx={{
                 color: theme.palette.primary.main,
+                p: 1,
                 backgroundColor: alpha(theme.palette.primary.main, 0.08),
               }}
             >
